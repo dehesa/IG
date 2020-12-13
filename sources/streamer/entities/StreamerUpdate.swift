@@ -48,14 +48,14 @@ extension Streamer.Update {
 extension Streamer.Update {
     /// The details of the given trade.
     public struct Details {
-        /// Instrument epic identifier.
-        public let epic: IG.Market.Epic
-        /// Instrument expiry period.
-        public let expiry: IG.Market.Expiry
         /// The position status.
         public let status: Self.Status
         /// The type of trade being updated.
         public let type: Self.Kind
+        /// Instrument epic identifier.
+        public let epic: IG.Market.Epic
+        /// Instrument expiry period.
+        public let expiry: IG.Market.Expiry
         /// Deal direction.
         public let direction: IG.Deal.Direction
         /// Deal size.

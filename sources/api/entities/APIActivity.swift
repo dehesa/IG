@@ -6,6 +6,8 @@ extension API {
     public struct Activity {
         /// The date of the activity item.
         public let date: Date
+        /// Activity description.
+        public let summary: String
         /// Activity configuration values.
         public let deal: Self.Deal
         /// Activity details.
@@ -24,10 +26,10 @@ extension API.Activity {
         public let actions: [API.Activity.Action]
         /// Action status.
         public let status: Self.Status
-        /// Activity description.
-        public let summary: String
         
         /// Activity status.
+        ///
+        /// The optional `details`' properties will be set or they will be `nil`, depending on whether this value is accepted or rejected.
         public enum Status: Hashable {
             /// The activity has been accepted.
             case accepted
@@ -40,8 +42,67 @@ extension API.Activity {
 }
 
 extension API.Activity {
+    /// Deal affected by an activity.
+    public struct Action {
+        /// Affected deal identifier.
+        public let dealId: IG.Deal.Identifier
+        /// Action type.
+        public let type: Self.Kind
+        
+        /// The action type.
+        ///
+        /// Refects who is the receiver of the action on what status has been changed to.
+        public enum Kind: Hashable {
+            /// The action affects a position and its status has been modified to the one given here.
+            case position(status: API.Activity.Action.PositionStatus)
+            /// The action affects a working order and its status has been modified to the one given here.
+            case workingOrder(status: API.Activity.Action.WorkingOrderStatus, type: IG.Deal.WorkingOrder?)
+            /// The action is of unknown character.
+            case unknown
+        }
+        
+        /// Position's action status.
+        public enum PositionStatus: Hashable {
+            /// The deal represents an open position creation.
+            case opened
+            /// A deal position stop and/or limit has been amended.
+            case amendedBoundary
+            /// The position has rolled for a fixed interval to the next.
+            case rolled
+            /// The position has been closed (partially or fully).
+            case closed(Self.Completion)
+            /// The position has been closed.
+            case deleted
+            /// The type of position closure.
+            public enum Completion: Hashable {
+                /// The position has only been partially closed (i.e. there are still remaining size.
+                case partially
+                /// The position has been fully closed.
+                case fully
+            }
+        }
+        
+        /// Working order's action status.
+        public enum WorkingOrderStatus: Hashable {
+            /// The deal represents a working order creation.
+            case opened
+            /// A working order has been amended/updated (i.e. the level, limit, or stop has been changed).
+            case amended
+            /// The working order has rolled for a fixed interval to the next.
+            case rolled
+            /// The working order has been successfully filled and thus transformed into a position.
+            case filled
+            /// The working order has been deleted.
+            case deleted
+        }
+    }
+}
+
+extension API.Activity {
     /// The details of the given activity object.
     public struct Details {
+        /// Activity type.
+        public let type: Self.Kind
         /// Instrument epic identifier.
         public let epic: IG.Market.Epic
         /// The period of the activity item.
@@ -50,14 +111,14 @@ extension API.Activity {
         public let marketName: String
         /// The currency denomination.
         public let currency: Currency.Code
-        /// Activity type.
-        public let type: Self.Kind
         /// Deal direction.
         public let direction: IG.Deal.Direction
         /// Deal size.
         public let size: Decimal64
-        /// Instrument price at which the activity has been "commited"
-        public let level: Decimal64
+        /// Instrument price at which the activity has been "commited".
+        ///
+        /// If the deal has been accepted, this property always return a value. If the deal has been rejected, this property may be `nil` (although not in all cases).
+        public let level: Decimal64?
         /// Level at which the user is happy to take profit.
         public let limit: (level: Decimal64, distance: Decimal64)?
         /// Stop for the targeted deal
@@ -71,12 +132,11 @@ extension API.Activity.Details {
     /// Activity Type.
     public enum Kind {
         /// Position activity.
-        case position
+        /// - parameter boundary: If `true`, the deal represent a change in the limit and/or stop exclusively.
+        case position(boundary: Bool)
         /// Working order activity.
         /// - parameter expiration: The time at which the working order expires. When the hosting activity represents a working order deletion, `expiration` is `nil`.
         case workingOrder(expiration: IG.Deal.WorkingOrder.Expiration?)
-        /// Amend stop or limit activity to a deal (can be used on positions and/or working orders).
-        case boundary
         /// System generated activity.
         case system
     }
@@ -98,52 +158,6 @@ extension API.Activity.Details {
     }
 }
 
-extension API.Activity {
-    /// Deal affected by an activity.
-    public struct Action {
-        /// Action type.
-        public let type: Self.Kind
-        /// Affected deal identifier.
-        public let dealId: IG.Deal.Identifier
-        
-        /// The action type.
-        ///
-        /// Refects who is the receiver of the action on what status has been changed to.
-        public enum Kind: Hashable {
-            /// The action affects a position and its status has been modified to the one given here.
-            case position(status: API.Activity.Action.PositionStatus)
-            /// The action affects a working order and its status has been modified to the one given here.
-            case workingOrder(status: API.Activity.Action.WorkingOrderStatus, type: IG.Deal.WorkingOrder?)
-            /// A deal (whether position or working order) stop and/or limit has been amended.
-            case boundary
-            /// The action is of unknown character.
-            case unknown
-        }
-        
-        /// Position's action status.
-        public enum PositionStatus: Hashable {
-            case opened
-            case rolled
-            case closed(Self.Completion)
-            case deleted
-            
-            public enum Completion: Hashable {
-                case partially
-                case fully
-            }
-        }
-        
-        /// Working order's action status.
-        public enum WorkingOrderStatus: Hashable {
-            case opened
-            case amended
-            case rolled
-            case filled
-            case deleted
-        }
-    }
-}
-
 // MARK: -
 
 extension API.Activity: Decodable {
@@ -151,12 +165,14 @@ extension API.Activity: Decodable {
         let container = try decoder.container(keyedBy: _Keys.self)
         let formatter = try decoder.userInfo[API.JSON.DecoderKey.computedValues] as? DateFormatter ?> DecodingError.dataCorruptedError(forKey: .date, in: container, debugDescription: "No DateFormatter was found on the decoder's userInfo.")
         self.date = try container.decode(Date.self, forKey: .date, with: formatter)
+        self.summary = try container.decode(String.self, forKey: .summary)
         self.deal = try .init(from: decoder)
         self.details = try .init(from: decoder)
     }
     
     private enum _Keys: String, CodingKey {
         case date
+        case summary = "description"
     }
 }
 
@@ -164,7 +180,6 @@ extension API.Activity.Deal: Decodable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: _Keys.self)
         self.id = try container.decode(IG.Deal.Identifier.self, forKey: .dealId)
-        self.summary = try container.decode(String.self, forKey: .summary)
         
         switch try container.decode(String.self, forKey: .dealStatus) {
         case "ACCEPTED": self.status = .accepted
@@ -180,7 +195,6 @@ extension API.Activity.Deal: Decodable {
     
     private enum _Keys: String, CodingKey {
         case dealId, dealStatus = "status"
-        case summary = "description"
         case details
         
         enum _DetailKeys: String, CodingKey {
@@ -195,37 +209,57 @@ extension API.Activity.Action: Decodable {
         self.dealId = try container.decode(IG.Deal.Identifier.self, forKey: .dealId)
 
         switch try container.decode(String.self, forKey: .type) {
-        case "STOP_LIMIT_AMENDED":  self.type = .boundary
-        case "POSITION_OPENED":     self.type = .position(status: .opened)
-        case "POSITION_ROLLED":     self.type = .position(status: .rolled)
+        case "POSITION_OPENED":           self.type = .position(status: .opened)
+        case "POSITION_ROLLED":           self.type = .position(status: .rolled)
+        case "STOP_LIMIT_AMENDED":        self.type = .position(status: .amendedBoundary)
         case "POSITION_PARTIALLY_CLOSED": self.type = .position(status: .closed(.partially))
-        case "POSITION_CLOSED":     self.type = .position(status: .closed(.fully))
-        case "POSITION_DELETED":    self.type = .position(status: .deleted)
-        case "LIMIT_ORDER_OPENED":  self.type = .workingOrder(status: .opened, type: .limit)
-        case "LIMIT_ORDER_FILLED":  self.type = .workingOrder(status: .filled, type: .limit)
-        case "LIMIT_ORDER_AMENDED": self.type = .workingOrder(status: .amended, type: .limit)
-        case "LIMIT_ORDER_ROLLED":  self.type = .workingOrder(status: .rolled, type: .limit)
-        case "LIMIT_ORDER_DELETED": self.type = .workingOrder(status: .deleted, type: .limit)
-        case "STOP_ORDER_OPENED":   self.type = .workingOrder(status: .opened, type: .stop)
-        case "STOP_ORDER_FILLED":   self.type = .workingOrder(status: .filled, type: .stop)
-        case "STOP_ORDER_AMENDED":  self.type = .workingOrder(status: .amended, type: .stop)
-        case "STOP_ORDER_ROLLED":   self.type = .workingOrder(status: .rolled, type: .stop)
-        case "STOP_ORDER_DELETED":  self.type = .workingOrder(status: .deleted, type: .stop)
+        case "POSITION_CLOSED":           self.type = .position(status: .closed(.fully))
+        case "POSITION_DELETED":          self.type = .position(status: .deleted)
+        case "LIMIT_ORDER_OPENED":    self.type = .workingOrder(status: .opened,  type: .limit)
+        case "LIMIT_ORDER_FILLED":    self.type = .workingOrder(status: .filled,  type: .limit)
+        case "LIMIT_ORDER_AMENDED":   self.type = .workingOrder(status: .amended, type: .limit)
+        case "LIMIT_ORDER_ROLLED":    self.type = .workingOrder(status: .rolled,  type: .limit)
+        case "LIMIT_ORDER_DELETED":   self.type = .workingOrder(status: .deleted, type: .limit)
+        case "STOP_ORDER_OPENED":     self.type = .workingOrder(status: .opened,  type: .stop)
+        case "STOP_ORDER_FILLED":     self.type = .workingOrder(status: .filled,  type: .stop)
+        case "STOP_ORDER_AMENDED":    self.type = .workingOrder(status: .amended, type: .stop)
+        case "STOP_ORDER_ROLLED":     self.type = .workingOrder(status: .rolled,  type: .stop)
+        case "STOP_ORDER_DELETED":    self.type = .workingOrder(status: .deleted, type: .stop)
         case "WORKING_ORDER_DELETED": self.type = .workingOrder(status: .deleted, type: nil)
-        case "UNKNOWN":             self.type = .unknown
+        case "UNKNOWN":      self.type = .unknown
         case let type: throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Invalid action type '\(type)'.")
         }
     }
 
     private enum _Keys: String, CodingKey {
-        case type = "actionType"
         case dealId = "affectedDealId"
+        case type = "actionType"
     }
 }
 
 extension API.Activity.Details: Decodable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: _Keys.self)
+        let detailsContainer = try container.nestedContainer(keyedBy: _Keys._DetailKeys.self, forKey: .details)
+        
+        switch try container.decode(String.self, forKey: .type) {
+        case "POSITION":            self.type = .position(boundary: false)
+        case "EDIT_STOP_AND_LIMIT": self.type = .position(boundary: true)
+        case "WORKING_ORDER":
+            switch try detailsContainer.decodeIfPresent(String.self, forKey: .expiration) {
+            case .none: self.type = .workingOrder(expiration: nil)
+            case "GTC": self.type = .workingOrder(expiration: .tillCancelled)
+            case let value?:
+                guard let formatter = decoder.userInfo[API.JSON.DecoderKey.computedValues] as? DateFormatter else {
+                    throw DecodingError.dataCorruptedError(forKey: .expiration, in: detailsContainer, debugDescription: "No DateFormatter was found on the decoder's userInfo.")
+                }
+                let date = try formatter.date(from: value) ?> DecodingError.dataCorruptedError(forKey: .expiration, in: detailsContainer, debugDescription: formatter.parseErrorLine(date: value))
+                self.type = .workingOrder(expiration: .tillDate(date))
+            }
+        case "SYSTEM": self.type = .system
+        case let value: throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Invalid activity type '\(value)'.")
+        }
+        
         self.epic = try container.decode(IG.Market.Epic.self, forKey: .epic)
         self.expiry = try container.decodeIfPresent(IG.Market.Expiry.self, forKey: .expiry) ?? .none
         
@@ -239,12 +273,11 @@ extension API.Activity.Details: Decodable {
         case let value: throw DecodingError.dataCorruptedError(forKey: .channel, in: container, debugDescription: "Invalid activity channel '\(value)'.")
         }
         
-        let detailsContainer = try container.nestedContainer(keyedBy: _Keys._DetailKeys.self, forKey: .details)
         self.marketName = try detailsContainer.decode(String.self, forKey: .marketName)
         self.currency = try detailsContainer.decode(Currency.Code.self, forKey: .currency)
         self.direction = try detailsContainer.decode(IG.Deal.Direction.self, forKey: .direction)
         self.size = try detailsContainer.decode(Decimal64.self, forKey: .size)
-        self.level = try detailsContainer.decode(Decimal64.self, forKey: .level)
+        self.level = try detailsContainer.decodeIfPresent(Decimal64.self, forKey: .level)
         
         switch (try detailsContainer.decodeIfPresent(Decimal64.self, forKey: .limitLevel), try detailsContainer.decodeIfPresent(Decimal64.self, forKey: .limitDistance)) {
         case (.none, .none): self.limit = nil
@@ -261,25 +294,6 @@ extension API.Activity.Details: Decodable {
             default: throw DecodingError.dataCorruptedError(forKey: .stopTrailingDistance, in: detailsContainer, debugDescription: "Invalid trailing stop.")
             }
         } else { self.stop = nil }
-
-        
-        switch try container.decode(String.self, forKey: .type) {
-        case "POSITION":            self.type = .position
-        case "EDIT_STOP_AND_LIMIT": self.type = .boundary
-        case "SYSTEM":              self.type = .system
-        case "WORKING_ORDER":
-            switch try detailsContainer.decodeIfPresent(String.self, forKey: .expiration) {
-            case .none: self.type = .workingOrder(expiration: nil)
-            case "GTC": self.type = .workingOrder(expiration: .tillCancelled)
-            case .some(let value):
-                guard let formatter = decoder.userInfo[API.JSON.DecoderKey.computedValues] as? DateFormatter else {
-                    throw DecodingError.dataCorruptedError(forKey: .expiration, in: detailsContainer, debugDescription: "No DateFormatter was found on the decoder's userInfo.")
-                }
-                let date = try formatter.date(from: value) ?> DecodingError.dataCorruptedError(forKey: .expiration, in: detailsContainer, debugDescription: formatter.parseErrorLine(date: value))
-                self.type = .workingOrder(expiration: .tillDate(date))
-            }
-        case let value: throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Invalid activity type '\(value)'.")
-        }
     }
     
     private enum _Keys: String, CodingKey {

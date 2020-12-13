@@ -29,13 +29,22 @@ public enum Deal {
 
     /// Position status.
     public enum Status: Hashable {
+        /// A new deal has been created.
         case opened
+        /// The targeted deal has been edited/updated.
         case amended
+        /// The targeted deal has been partially or fully closed.
         case closed(Self.Completion)
+        /// The targeted deal has been deleted.
         case deleted
         
+        /// The completion status of a deal.
+        ///
+        /// A deal can be partially or fully closed.
         public enum Completion: Hashable {
+            /// The target entity has only been partially closed.
             case partially
+            /// The target entity has been fully closed.
             case fully
         }
     }
@@ -47,7 +56,9 @@ public enum Deal {
         /// The profit currency.
         public let currency: Currency.Code
         
-        /// Designated initializer
+        /// Designated initializer.
+        /// - parameter value: The profit value (can be negative).
+        /// - parameter currency: The currency the value is framed on.
         internal init(value: Decimal64, currency: Currency.Code) {
             self.value = value
             self.currency = currency

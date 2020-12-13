@@ -11,17 +11,26 @@ final class APIActivityTests: XCTestCase {
     /// Tests paginated activity retrieval.
     func testActivities() {
         let api = API()
-        api.session.login(type: .oauth, key: "<#API key#>", user: ["<#Username#>", "<#Password#>"]).expectsCompletion(timeout: 1.2, on: self)
+        api.session.login(type: .oauth, key: "<#API key#>", user: ["<#Username#>", "<#Password#>"])
+            .expectsCompletion(timeout: 1.2, on: self)
         
-        let date = Date().lastTuesday
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy.MM.dd"
+        
+        let date = formatter.date(from: "2019.10.01")!
         let activities = api.accounts.getActivityContinuously(from: date)
-            .expectsAll(timeout: 2, on: self)
+            .expectsAll(timeout: 10, on: self)
             .flatMap { $0 }
         XCTAssertFalse(activities.isEmpty)
         
+        print()
+        
         for activity in activities {
             XCTAssertGreaterThan(activity.date, date)
-            XCTAssertFalse(activity.deal.summary.isEmpty)
+            XCTAssertFalse(activity.summary.isEmpty)
+            print(activity.summary)
         }
+        
+        print("\n\(activities.count)\n")
     }
 }

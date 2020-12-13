@@ -55,7 +55,7 @@ extension Streamer.Confirmation.Deal {
 }
 
 extension Streamer.Confirmation {
-    /// The confirmation details. Many of its property will be `nil` if the overarching deal hasn't been accepted.
+    /// The confirmation details. Many of its property will be `nil` if the overarching deal has been rejected.
     public struct Details {
         /// Instrument epic identifier.
         public let epic: IG.Market.Epic
