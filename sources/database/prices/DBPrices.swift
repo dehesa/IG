@@ -1,4 +1,5 @@
 import Combine
+import Conbini
 import Foundation
 import Decimals
 import SQLite3
@@ -224,7 +225,7 @@ extension Database.Request.Prices {
 
 extension Database.Request.Prices {
     /// Updates the database with the information received from the server.
-    /// - note: The market must be in the database before storing its price points.
+    /// - requires: The market must be in the database before storing its price points.
     /// - parameter prices: The array of price points that have arrived from the server.
     /// - parameter epic: Instrument's epic (such as `CS.D.EURUSD.MINI.IP`).
     /// - returns: A publisher that completes successfully (without sending any value) if the operation has been successful.
@@ -261,9 +262,39 @@ extension Database.Request.Prices {
             .mapError(errorCast)
             .eraseToAnyPublisher()
     }
+    
+    /// Updates the database with the given price points.
+    /// - requires: The market must be in the database before storing its price data.
+    /// - parameter prices: The array of price points that have been modified or will be added.
+    /// - parameter epic: Instrument's epic (such as `CS.D.EURUSD.MINI.IP`).
+    /// - returns: A publisher that completes successfully (without sending any value) if the operation has been successful.
+    public func update(_ prices: [Database.Price], epic: IG.Market.Epic) -> AnyPublisher<Never,IG.Error> {
+        guard !prices.isEmpty else { return Empty().eraseToAnyPublisher() }
+        
+        return self._database.publisher { _ in
+                Self._priceInsertionQuery(epic: epic)
+            }.write { (sqlite, statement, input) -> Void in
+                // 1. Check the epic is on the Markets table.
+                guard try Self._existsMarket(epic: epic, sqlite: sqlite) else { throw IG.Error._unfoundMarket(epic: epic) }
+                // 2. Check the existance of the price table or create it if it is not there.
+                if try !Self._existsPriceTable(epic: epic, sqlite: sqlite) {
+                    try sqlite3_exec(sqlite, Database.Price.tableDefinition(name: input.tableName), nil, nil, nil).expects(.ok) {
+                        IG.Error._tableCreationFailed(name: input.tableName, code: $0)
+                    }
+                }
+                // 3. Add the data to the database.
+                try sqlite3_prepare_v2(sqlite, input.query, -1, &statement, nil).expects(.ok) { IG.Error._compilationFailed(code: $0) }
+                for p in prices {
+                    p._bind(to: statement!)
+                    try sqlite3_step(statement).expects(.done) { IG.Error._storingFailed(code: $0) }
+                    sqlite3_clear_bindings(statement)
+                    sqlite3_reset(statement)
+                }
+            }.ignoreOutput()
+            .mapError(errorCast)
+            .eraseToAnyPublisher()
+    }
 }
-
-import Conbini
 
 extension Publisher where Output==Streamer.Chart.Aggregated, Failure==IG.Error {
     /// Updates the database with the price values provided on the stream.

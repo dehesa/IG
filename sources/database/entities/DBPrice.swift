@@ -8,15 +8,15 @@ extension Database {
         /// Snapshot date.
         public let date: Date
         /// Open session price.
-        public let open: Self.Point
+        public var open: Self.Point
         /// Close session price.
-        public let close: Self.Point
+        public var close: Self.Point
         /// Lowest price.
-        public let lowest: Self.Point
+        public var lowest: Self.Point
         /// Highest price.
-        public let highest: Self.Point
+        public var highest: Self.Point
         /// Last traded volume.
-        public let volume: Int
+        public var volume: Int
     }
     
     /// Price proceeding from a `Streamer` session that has been processed by the database.
@@ -42,11 +42,11 @@ extension Database.Price {
         /// Bid price (i.e. the price another trader is willing to buy for).
         ///
         /// The _bid price_ is always lower than the _ask price_.
-        public let bid: Decimal64
+        public var bid: Decimal64
         /// Ask price (i.e. the price another trader will sell at).
         ///
         /// The _ask price_ is always higher than the _bid price_.
-        public let ask: Decimal64
+        public var ask: Decimal64
         /// The middle price between the *bid* and the *ask* price.
         @_transparent public var mid: Decimal64 { self.bid + Decimal64(5, power: -1).unsafelyUnwrapped * (self.ask - self.bid) }
     }

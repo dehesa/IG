@@ -56,6 +56,8 @@ extension API.Activity {
             /// The action affects a position and its status has been modified to the one given here.
             case position(status: API.Activity.Action.PositionStatus)
             /// The action affects a working order and its status has been modified to the one given here.
+            /// - parameter status: The working order status (e.g. opened, amended, etc.).
+            /// - parameter type: The type of working order (whether "limit" or "stop" order). If the status is `.deleted`, the `type` might be `nil`.
             case workingOrder(status: API.Activity.Action.WorkingOrderStatus, type: IG.Deal.WorkingOrder?)
             /// The action is of unknown character.
             case unknown

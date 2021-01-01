@@ -187,7 +187,7 @@ extension API.Request.Deals.Position {
         case level(Decimal64)
         /// A distance from the buy/sell level which will be moved towards the current level in case of a favourable trade.
         /// - parameter level: The new stop level.
-        /// - parameter distance: The distance from the  market price at which point the stop will jump.
+        /// - parameter distance: The distance from the market price at which point the stop will jump.
         /// - parameter increment: The stop level increment step in pips.
         case trailing(level: Decimal64, distance: Decimal64, increment: Decimal64)
     }

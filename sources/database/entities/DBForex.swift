@@ -153,6 +153,7 @@ extension Database.Market.Forex {
     /// - parameter size: The size of the targeted given deal.
     /// - parameter level: The price at which the deal will be opened.
     /// - parameter stop: The stop that will be used for the deal being operated.
+    /// - returns: The margin requirement expressed as a value of the counter currency.
     public func margin(size: Decimal64, level: Decimal64, stop: Self.Stop?) -> Decimal64 {
         let marginFactor = self.information.margin.depositBands.depositFactor(size: size) >> 2
         let quantity = size * Decimal64(exactly: self.information.contractSize)!
